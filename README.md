@@ -7,8 +7,10 @@
 - **直接双击** `index.html`（无需任何环境，Chrome / Edge 均可）
 - 或启动本地服务器：`node server.js`，然后访问 http://localhost:8123
 - **iPad 使用**：
+  - **推荐**：部署到 GitHub Pages（HTTPS），麦克风跟练、离线缓存、添加到主屏幕全部可用
+    → 见 [部署到 GitHub Pages](docs/部署到GitHub-Pages.md)
   - 局域网：电脑跑 `node server.js`（会打印局域网 IP），iPad 与电脑连同一 Wi-Fi，Safari 打开 `http://电脑IP:8123`
-  - 公网：部署到 GitHub Pages / Netlify 等静态托管（项目为纯静态，PWA 已配置），Safari 访问后「添加到主屏幕」可全屏、离线使用
+    （http 下麦克风跟练不可用，其余功能正常）
 
 ## 功能
 
@@ -73,6 +75,7 @@
 ## 文档
 
 - [功能规格说明书](docs/功能规格.md)：完整功能规格、已知问题清单、后续功能路线图
+- [部署到 GitHub Pages](docs/部署到GitHub-Pages.md)：从零开始的部署步骤与常见问题
 
 ## 技术
 
