@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>五线谱小课堂</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0078d4">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script>
+// 首帧应用已保存的主题，避免闪烁（app.js 会再次完整初始化）
+try {
+  var saved = JSON.parse(localStorage.getItem('music-tutor-v1'));
+  // v2 多档案结构：主题在 profiles[activeId].data 里；v1 是裸 state
+  var savedData = saved && saved.profiles && saved.profiles[saved.activeId]
+    ? saved.profiles[saved.activeId].data : saved;
+  if (savedData && savedData.theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+} catch (e) {}
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="mica" aria-hidden="true"></div>
+<a class="skip-link" href="#mainContent">跳到主要内容</a>
+
+<div class="app">
+  <!-- 顶部导航（WinUI NavigationView 风格） -->
+  <header class="nav-view">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">🎼</span>
+      <span class="brand-name">五线谱小课堂</span>
+    </div>
+    <nav class="nav-tabs" role="tablist" aria-label="主导航">
+      <button class="nav-tab active" id="tab-practice" data-page="practice" role="tab" aria-controls="page-practice" aria-selected="true" tabindex="0">✏️ 识谱练习</button>
+      <button class="nav-tab" id="tab-courses" data-page="courses" role="tab" aria-controls="page-courses" aria-selected="false" tabindex="-1">📚 课程</button>
+      <button class="nav-tab" id="tab-songs" data-page="songs" role="tab" aria-controls="page-songs" aria-selected="false" tabindex="-1">🎵 曲谱库</button>
+      <button class="nav-tab" id="tab-learn" data-page="learn" role="tab" aria-controls="page-learn" aria-selected="false" tabindex="-1">📖 认识五线谱</button>
+      <button class="nav-tab" id="tab-train" data-page="train" role="tab" aria-controls="page-train" aria-selected="false" tabindex="-1">🎯 训练营</button>
+      <button class="nav-tab" id="tab-weekly" data-page="weekly" role="tab" aria-controls="page-weekly" aria-selected="false" tabindex="-1">👨‍👩‍👧 周报</button>
+      <button class="nav-tab" id="tab-settings" data-page="settings" role="tab" aria-controls="page-settings" aria-selected="false" tabindex="-1">⚙️ 设置</button>
+    </nav>
+    <div class="nav-actions">
+      <button id="profileBtn" class="icon-btn profile-btn" title="切换小朋友" aria-label="切换小朋友">
+        <span id="profileAvatar">🐻</span><span id="profileName" class="profile-name">小朋友</span>
+      </button>
+      <button id="soundBtn" class="icon-btn" title="声音开关" aria-label="声音开关">🔊</button>
+      <button id="themeBtn" class="icon-btn" title="切换浅色/深色" aria-label="切换主题">🌙</button>
+    </div>
+  </header>
+
+  <main class="content" id="mainContent">
+    <!-- ============ 练习页 ============ -->
+    <section id="page-practice" class="page active" role="tabpanel" aria-labelledby="tab-practice" tabindex="0">
+      <div id="courseBanner" class="course-banner" style="display:none"></div>
+      <div class="stats-row">
+        <div class="stat-chip" title="累计星数"><span class="stat-ico">⭐</span><span id="statStars">0</span></div>
+        <div class="stat-chip"><span class="stat-ico">🔥</span><span id="statStreak">0</span></div>
+        <div class="stat-chip"><span class="stat-ico">📅</span>连续 <span id="dayStreak">0</span> 天</div>
+        <div class="stat-chip" title="一次答对率"><span class="stat-ico">🎯</span><span id="statRate">0%</span></div>
+        <div class="stat-chip stat-quest" title="答对题数"><span class="stat-ico">📝</span>答对 <span id="statCount">0</span></div>
+        <div class="xp-chip" title="练习升级">
+          <span class="xp-ico">🎖️</span>
+          <span>Lv.<span id="xpLevel">1</span></span>
+          <div class="xp-track"><div class="xp-bar" id="xpBar"></div></div>
+          <span class="xp-text" id="xpText">0/20</span>
+        </div>
+      </div>
+
+      <div class="card staff-card">
+        <div class="segmented mode-seg" id="segMode">
+          <button class="seg" data-mode="name">👆 点音名</button>
+          <button class="seg" data-mode="keyboard">🎹 点琴键</button>
+          <button class="seg" data-mode="listen">👂 听音辨键</button>
+          <button class="seg" data-mode="place">✍️ 放音符</button>
+        </div>
+        <div id="practiceStaff" class="staff-wrap" role="img" aria-label="五线谱题目"></div>
+        <div id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></div>
+      </div>
+
+      <div class="card answer-card">
+        <p class="answer-title" id="placeLabel">这个音符是？</p>
+        <div id="answerButtons" class="answer-grid"></div>
+        <div id="keyboardAnswer" class="keyboard-wrap" style="display:none"></div>
+        <div class="answer-actions">
+          <button id="replayBtn" class="text-btn replay-btn" style="display:none">🔊 再听一次</button>
+          <span id="placeConfirmWrap" style="display:none">
+            <button id="placeConfirm" class="action-btn" disabled>✅ 就是这个！</button>
+          </span>
+        </div>
+        <p id="answerHint" class="answer-hint"></p>
+      </div>
+
+      <div class="card task-card">
+        <div class="card-head"><span class="card-title">📋 今日任务</span><span class="card-sub">每天完成一个小目标，坚持就是胜利！</span></div>
+        <ul id="taskList" class="task-list"></ul>
+      </div>
+    </section>
+
+    <!-- ============ 课程页 ============ -->
+    <section id="page-courses" class="page" role="tabpanel" aria-labelledby="tab-courses" tabindex="0">
+      <div class="card course-line-card">
+        <div class="card-head"><span class="card-title">📚 教材课程</span><span class="card-sub">按教材闯关，进度各自独立</span></div>
+        <div id="courseLineTabs" class="segmented course-line-tabs"></div>
+      </div>
+      <div id="courseList" class="course-list"></div>
+      <div id="courseDetail" style="display:none"></div>
+    </section>
+
+    <!-- ============ 曲谱库页 ============ -->
+    <section id="page-songs" class="page" role="tabpanel" aria-labelledby="tab-songs" tabindex="0">
+      <div id="songList" class="song-list"></div>
+      <div id="songDetail" style="display:none"></div>
+    </section>
+
+    <!-- ============ 学习页 ============ -->
+    <section id="page-learn" class="page" role="tabpanel" aria-labelledby="tab-learn" tabindex="0">
+      <div class="card learn-staff-card">
+        <div class="card-head">
+          <span class="card-title" id="learnTitle">高音谱号 · 音阶</span>
+          <span class="card-sub" id="learnSub">点一点音符，听一听它叫什么</span>
+        </div>
+        <div id="learnStaff" class="staff-wrap scroll-x" role="img" aria-label="音阶一览"></div>
+      </div>
+      <div class="card keyboard-card">
+        <div class="card-head">
+          <span class="card-title">钢琴键盘</span>
+          <span class="card-sub">点键盘也能听到音，还能在五线谱上显示</span>
+        </div>
+        <div id="learnKeyboard" class="keyboard-wrap"></div>
+        <div id="learnKeyInfo" class="learn-key-info"></div>
+      </div>
+    </section>
+
+    <!-- ============ 训练营（视奏 / 乐理 / 节奏） ============ -->
+    <section id="page-train" class="page" role="tabpanel" aria-labelledby="tab-train" tabindex="0">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">🎯 训练营</span>
+          <span class="card-sub">视奏、乐理、节奏，三项基本功</span>
+        </div>
+        <div class="segmented train-tabs" id="trainTabs">
+          <button class="seg active" data-tab="sight">👀 视奏</button>
+          <button class="seg" data-tab="theory">🧠 乐理</button>
+          <button class="seg" data-tab="rhythm">👏 节奏</button>
+          <button class="seg" data-tab="review">📕 错题本</button>
+          <button class="seg" data-tab="history">📈 练习记录</button>
+        </div>
+      </div>
+
+      <!-- 视奏 -->
+      <div id="trainSight" class="train-pane">
+        <div class="card">
+          <div class="train-bar">
+            <div class="train-levels" id="sightLevels">
+              <button class="seg" data-level="1">入门</button>
+              <button class="seg" data-level="2">初级</button>
+              <button class="seg" data-level="3">中级</button>
+              <button class="seg" data-level="4">进阶</button>
+            </div>
+            <button class="action-btn" id="sightStartBtn">▶ 开始视奏</button>
+          </div>
+          <p class="train-tip" id="sightTip">看一小节没见过的谱，用麦克风或键盘把音弹/唱出来。只判音高顺序，不要求节奏。</p>
+          <div id="sightStaff" class="staff-wrap scroll-x"></div>
+          <div id="sightTimer" class="train-timer" style="display:none"></div>
+          <div id="sightStatus" class="sing-status"></div>
+          <div id="sightResult" class="train-result" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- 乐理 -->
+      <div id="trainTheory" class="train-pane" style="display:none">
+        <div class="card">
+          <div class="train-bar">
+            <div class="train-levels" id="theoryCats"></div>
+            <button class="action-btn" id="theoryStartBtn">▶ 开始答题</button>
+          </div>
+          <div id="theoryBody" class="theory-body"></div>
+        </div>
+      </div>
+
+      <!-- 错题本 -->
+      <div id="trainReview" class="train-pane" style="display:none">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">📕 错题本</span>
+            <span class="card-sub">答错的音按次数排序，可以针对性地练</span>
+          </div>
+          <div id="reviewBody" class="review-body"></div>
+          <div class="train-bar" style="margin-top:14px">
+            <button class="action-btn" id="reviewDrillBtn">🎯 练这些音（10 题）</button>
+            <button class="text-btn" id="reviewClearBtn">清空错题本</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 练习记录 -->
+      <div id="trainHistory" class="train-pane" style="display:none">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">📈 练习记录</span>
+            <span class="card-sub">最近 7 天</span>
+          </div>
+          <div id="historySummary" class="history-summary"></div>
+          <div id="historyChart" class="history-chart"></div>
+          <div id="historyLegend" class="history-legend"></div>
+        </div>
+      </div>
+
+      <!-- 节奏 -->
+      <div id="trainRhythm" class="train-pane" style="display:none">
+        <div class="card">
+          <div class="train-bar">
+            <div class="train-levels" id="rhythmLevels">
+              <button class="seg" data-level="1">入门</button>
+              <button class="seg" data-level="2">初级</button>
+              <button class="seg" data-level="3">中级</button>
+            </div>
+            <button class="action-btn" id="rhythmStartBtn">▶ 开始打拍</button>
+          </div>
+          <p class="train-tip">跟着节拍器，在「拍手」标记处点大按钮或按空格键。先听一小节预备拍。</p>
+          <div id="rhythmView" class="rhythm-view"></div>
+          <div id="rhythmStatus" class="sing-status"></div>
+          <button class="rhythm-pad" id="rhythmPad" disabled>👏 点这里打拍</button>
+          <div id="rhythmResult" class="train-result" style="display:none"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 家长周报 ============ -->
+    <section id="page-weekly" class="page" role="tabpanel" aria-labelledby="tab-weekly" tabindex="0">
+      <div class="card challenge-card">
+        <div class="card-head">
+          <span class="card-title">⚡ 每日挑战</span>
+          <span class="card-sub" id="challengeSub">8 题 · 60 秒</span>
+        </div>
+        <div id="challengeBody"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">👨‍👩‍👧 家长周报</span>
+          <span class="card-sub" id="weeklyRange">最近 7 天</span>
+        </div>
+        <div id="weeklyBody"></div>
+      </div>
+    </section>
+
+    <!-- ============ 设置页 ============ -->
+    <section id="page-settings" class="page" role="tabpanel" aria-labelledby="tab-settings" tabindex="0">
+      <div class="settings-grid">
+        <div class="card settings-card">
+          <div class="card-head">
+            <span class="card-title">小朋友档案</span>
+            <span class="card-sub">每个小朋友的进度独立保存</span>
+          </div>
+          <div id="profileList" class="profile-list"></div>
+          <div class="profile-add">
+            <input type="text" id="profileNameInput" class="profile-input" maxlength="12"
+                   placeholder="新小朋友的名字" aria-label="新小朋友的名字">
+            <button class="action-btn" id="profileAddBtn">＋ 添加</button>
+          </div>
+          <p class="settings-note">切换档案后，成绩、课程、徽章、错题本都会各自独立。</p>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-head"><span class="card-title">识谱设置</span></div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="setting-name">谱号</span>
+              <span class="setting-desc">练习和学习用哪个谱号</span>
+            </div>
+            <div class="segmented" id="segClef">
+              <button class="seg" data-value="treble">高音</button>
+              <button class="seg" data-value="bass">低音</button>
+              <button class="seg" data-value="random">随机</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="setting-name">难度</span>
+              <span class="setting-desc">简单/标准：只练白键；88 键：钢琴全部琴键（含黑键）</span>
+            </div>
+            <div class="segmented" id="segDifficulty">
+              <button class="seg" data-value="easy">简单</button>
+              <button class="seg" data-value="standard">标准</button>
+              <button class="seg" data-value="full">88 键</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="setting-name">答案写法</span>
+              <span class="setting-desc">Do Re Mi 唱名 或 C D E 音名</span>
+            </div>
+            <div class="segmented" id="segNaming">
+              <button class="seg" data-value="solfege">Do Re Mi</button>
+              <button class="seg" data-value="letter">C D E</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="setting-name">八度判定</span>
+              <span class="setting-desc">点琴键/放音符时是否要求八度完全正确</span>
+            </div>
+            <div class="segmented" id="segOctave">
+              <button class="seg" data-value="lenient">宽容</button>
+              <button class="seg" data-value="strict">严格</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="setting-name">声音</span>
+              <span class="setting-desc">答对/答错时的钢琴发音</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="swSound" checked aria-label="声音开关">
+              <span class="track"><span class="thumb"></span></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-head">
+            <span class="card-title">我的成绩</span>
+            <span class="reset-actions">
+              <button id="resetStats" class="text-btn" data-reset="stats">重置统计</button>
+              <button id="resetCourses" class="text-btn" data-reset="courses">重置课程</button>
+              <button id="resetAll" class="text-btn danger" data-reset="all">全部清空</button>
+            </span>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-box"><span class="stat-box-num" id="sTotal">0</span><span class="stat-box-label">尝试次数</span></div>
+            <div class="stat-box"><span class="stat-box-num" id="sCorrect">0</span><span class="stat-box-label">答对题数</span></div>
+            <div class="stat-box"><span class="stat-box-num" id="sFirstTry">0</span><span class="stat-box-label">一次答对</span></div>
+            <div class="stat-box"><span class="stat-box-num" id="sBest">0</span><span class="stat-box-label">最佳连对</span></div>
+            <div class="stat-box"><span class="stat-box-num" id="sStars">0</span><span class="stat-box-label">累计星数</span></div>
+          </div>
+          <p class="settings-note">成绩保存在这台电脑上，不会上传。重置操作需连点两次确认。</p>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-head">
+            <span class="card-title">数据备份</span>
+            <span class="card-sub">换设备、清缓存前先导出</span>
+          </div>
+          <p class="settings-note" style="margin-top:0">
+            进度只存在这台设备的浏览器里。导出后会下载一个 JSON 文件，换设备时导入即可恢复。
+          </p>
+          <div class="backup-actions">
+            <button class="action-btn" id="exportBtn">⬇️ 导出备份</button>
+            <label class="action-btn ghost backup-import" for="importFile">⬆️ 导入备份</label>
+            <input type="file" id="importFile" accept="application/json,.json" hidden>
+          </div>
+          <p id="backupStatus" class="backup-status" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-head"><span class="card-title">我的徽章</span></div>
+          <div id="badgeList" class="badge-list"></div>
+          <p class="settings-note">完成目标就能点亮徽章，只有一次哦～</p>
+        </div>
+
+        <div class="card settings-card">
+          <div class="card-head"><span class="card-title">怎么玩</span></div>
+          <ul class="howto">
+            <li>✏️ <b>识谱练习</b>：四种玩法——看谱点音名、看谱点琴键、听音辨键、看音名放音符。</li>
+            <li>⌨️ 快捷键：A S D F G H J 是白键，W E T Y U 是黑键（升号），数字 1–7 也对应唱名。</li>
+            <li>答错了没关系，可以再试，直到答对为止～</li>
+            <li>📖 <b>认识五线谱</b>：看整个音阶，点音符听声音、看它在键盘的位置。</li>
+            <li>🎹 难度选 <b>88 键</b>：出题覆盖钢琴全部 88 个琴键（含黑键），学习页显示完整钢琴键盘。</li>
+            <li>🔥 连续答对累积连对，每天练习保持连续天数，还能点亮徽章！</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/courses.js"></script>
+<script src="js/songs.js"></script>
+<script src="js/library.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/pitch.js"></script>
+<script src="js/midi.js"></script>
+<script src="js/follow.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/recorder.js"></script>
+<script src="js/profiles.js"></script>
+<script src="js/backup.js"></script>
+<script src="js/weekly.js"></script>
+<script src="js/challenge.js"></script>
+<script src="js/sight.js"></script>
+<script src="js/glyphs.js"></script>
+<script src="js/staff.js"></script>
+<script src="js/gamify.js"></script>
+<script src="js/practice.js"></script>
+<script src="js/app.js"></script>
+<script>
+// 注册 Service Worker（HTTPS/localhost 下生效；局域网 http 下自动跳过）
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  navigator.serviceWorker.register('./sw.js').catch(function () {});
+}
+</script>
+</body>
+</html>

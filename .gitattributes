@@ -1,0 +1,4 @@
+# 统一换行，避免 Windows 检出后脚本出现 CRLF
+* text=auto eol=lf
+*.png binary
+*.ico binary

@@ -1,0 +1,77 @@
+# 部署到 GitHub Pages
+# 触发：推送到 main 分支，或在 Actions 页面手动运行
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署；新的推送不取消已开始的发布
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install test deps
+        run: npm ci || npm install
+
+      - name: Run unit tests
+        run: |
+          node js/core.test.js
+          node js/test-follow.js
+          node js/test-stats.js
+          node js/test-backup.js
+          node js/test-profiles.js
+          node js/test-weekly.js
+          node js/test-challenge.js
+
+      - name: Run integration tests
+        run: node js/integration.test.js
+
+      - name: Prepare static site
+        run: |
+          mkdir -p _site
+          # 只发布运行所需的静态文件，排除源码测试、脚本与依赖
+          cp -r index.html style.css manifest.json sw.js icons js _site/
+          cp -r docs _site/ 2>/dev/null || true
+          # 移除测试文件，避免把测试代码发布到线上
+          rm -f _site/js/*.test.js _site/js/test-*.js
+          touch _site/.nojekyll
+          echo "发布内容："
+          find _site -type f | sort
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
