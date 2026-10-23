@@ -19,28 +19,39 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          # jsdom 30 要求 Node ^22.22.2 || ^24.15.0，用 20 会导致 npm ci 失败
+          node-version: '24'
+          cache: npm
 
       - name: Install test deps
-        run: npm ci || npm install
+        run: |
+          # 只装测试依赖（jsdom）；playwright/potrace 仅本地脚本使用，CI 不需要浏览器
+          npm ci --no-audit --no-fund
 
       - name: Run unit tests
         run: |
-          node js/core.test.js
-          node js/test-follow.js
-          node js/test-stats.js
-          node js/test-backup.js
-          node js/test-profiles.js
-          node js/test-weekly.js
-          node js/test-challenge.js
+          set -e
+          for f in \
+            js/core.test.js \
+            js/test-follow.js \
+            js/test-stats.js \
+            js/test-backup.js \
+            js/test-profiles.js \
+            js/test-weekly.js \
+            js/test-challenge.js
+          do
+            echo "::group::运行 $f"
+            node "$f"
+            echo "::endgroup::"
+          done
 
       - name: Run integration tests
         run: node js/integration.test.js
@@ -48,7 +59,7 @@ jobs:
       - name: Prepare static site
         run: |
           mkdir -p _site
-          # 只发布运行所需的静态文件，排除源码测试、脚本与依赖
+          # 只发布运行所需的静态文件，排除测试代码、脚本与依赖
           cp -r index.html style.css manifest.json sw.js icons js _site/
           cp -r docs _site/ 2>/dev/null || true
           # 移除测试文件，避免把测试代码发布到线上
@@ -67,7 +78,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
