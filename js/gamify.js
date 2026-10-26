@@ -162,7 +162,7 @@
     function checkBadges() {
       var g = state.gamify;
       var p = {
-        correct: state.stats.firstTry,
+        correct: state.stats.correct || 0,
         bestStreak: state.stats.bestStreak,
         dayStreak: g.dayStreak,
         fullCorrect: state.stats.fullCorrect,
@@ -195,9 +195,9 @@
       var st = state.stats || {};
       var g = state.gamify || {};
       var cur = 0, need = 1;
-      if (b.id === 'first') { cur = st.firstTry || 0; need = 1; }
-      else if (b.id === 'correct50') { cur = st.firstTry || 0; need = 50; }
-      else if (b.id === 'correct200') { cur = st.firstTry || 0; need = 200; }
+      if (b.id === 'first') { cur = st.correct || 0; need = 1; }
+      else if (b.id === 'correct50') { cur = st.correct || 0; need = 50; }
+      else if (b.id === 'correct200') { cur = st.correct || 0; need = 200; }
       else if (b.id === 'streak10') { cur = st.bestStreak || 0; need = 10; }
       else if (b.id === 'day7') { cur = g.dayStreak || 0; need = 7; }
       else if (b.id === 'full88') { cur = st.fullCorrect || 0; need = 20; }

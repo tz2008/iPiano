@@ -127,6 +127,18 @@ t('合并游戏化：XP/天数取大、徽章取并集', () => {
   assert.strictEqual(out.gamify.lastDay, '2026-10-21');
   assert.deepStrictEqual(Object.keys(out.gamify.badges).sort(), ['first', 'streak10']);
 });
+t('合并挑战进度：全对天数取大、次数相加', () => {
+  const cur = { challenge: { attempts: 1, best: 5, perfectDays: 1, lastDate: '2026-10-20',
+    history: { '2026-10-20': { correct: 5, total: 8, perfect: false } } } };
+  const inc = { challenge: { attempts: 2, best: 8, perfectDays: 3, lastDate: '2026-10-22',
+    history: { '2026-10-21': { correct: 8, total: 8, perfect: true } } } };
+  const out = B.mergeState(cur, inc);
+  assert.strictEqual(out.challenge.attempts, 3, '次数相加');
+  assert.strictEqual(out.challenge.best, 8, '最佳取大');
+  assert.strictEqual(out.challenge.perfectDays, 3, '全对天数取大');
+  assert.strictEqual(out.challenge.lastDate, '2026-10-22', '最近日期取新');
+  assert.strictEqual(Object.keys(out.challenge.history).length, 2, '历史合并');
+});
 t('合并不修改原对象', () => {
   const cur = sampleState();
   const snapshot = JSON.stringify(cur);

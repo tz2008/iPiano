@@ -928,6 +928,50 @@ const savedData = (win) => {
   window.PitchDetector.start = origStart;
   window.PitchDetector.stop = origStop;
 
+  // ---------- 回归：审计发现的缺陷 ----------
+  {
+    // (a) 非练习页按字母键不应答题
+    click(document.querySelector('.nav-tab[data-page="settings"]'));
+    await sleep(50);
+    const a0 = window.__musicApp.state().stats.attempts;
+    ['a', 's', 'd', 'f', 'g'].forEach(key =>
+      document.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true })));
+    await sleep(50);
+    assert.strictEqual(window.__musicApp.state().stats.attempts, a0, '设置页按键不答题');
+
+    // (b) 放音符模式切走后，点谱面不再改音符
+    click(document.querySelector('.nav-tab[data-page="practice"]'));
+    await sleep(50);
+    click(document.querySelector('#segMode [data-mode="place"]'));
+    await sleep(80);
+    click(document.querySelector('#segMode [data-mode="name"]'));
+    await sleep(80);
+    const beforeMidi = document.querySelector('#practiceStaff .note').dataset.midi;
+    const svg = document.querySelector('#practiceStaff svg');
+    svg.getBoundingClientRect = () => ({ top: 0, left: 0, width: 460, height: 300, right: 460, bottom: 300 });
+    svg.dispatchEvent(new window.MouseEvent('click', { bubbles: true, clientY: 40 }));
+    await sleep(50);
+    assert.strictEqual(document.querySelector('#practiceStaff .note').dataset.midi, beforeMidi,
+      '点音名模式下点谱面不改音符');
+
+    // (c) 快捷键在点琴键模式按半音类判定正确
+    click(document.querySelector('#segMode [data-mode="keyboard"]'));
+    await sleep(80);
+    const kn = document.querySelector('#practiceStaff .note');
+    const km = parseInt(kn.dataset.midi, 10) + parseInt(kn.dataset.accidental || '0', 10);
+    const LETTER_PC = { a: 0, s: 2, d: 4, f: 5, g: 7, h: 9, j: 11 };
+    let key = null;
+    Object.keys(LETTER_PC).forEach(k => { if (LETTER_PC[k] === km % 12) key = k; });
+    if (key) {
+      const c0 = window.__musicApp.state().stats.correct;
+      document.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true }));
+      await sleep(50);
+      assert.ok(window.__musicApp.state().stats.correct > c0, '快捷键在点琴键模式判对');
+      await sleep(1300);
+    }
+    click(document.querySelector('#segMode [data-mode="name"]'));
+  }
+
   // ---------- 回归：学习页每个音符都可点击 ----------
   {
     click(document.querySelector('.nav-tab[data-page="learn"]'));
@@ -986,9 +1030,9 @@ const savedData = (win) => {
       const opts = document.querySelectorAll('#chOptions .answer-btn, #chOptions .theory-opt');
       assert.ok(opts.length > 0, '第 ' + (i + 1) + ' 题有选项');
       click(opts[q.answer]);
-      await sleep(20);
+      await sleep(150);   // 等防连点锁释放
     }
-    await sleep(60);
+    await sleep(150);
     assert.ok($('challengeBody').textContent.includes('全对'), '全对结果');
     const cs = window.__musicApp.state().challenge;
     assert.strictEqual(cs.perfectDays, 1, '全对天数 +1');

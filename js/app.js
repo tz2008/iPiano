@@ -97,6 +97,7 @@
       if (typeof s.metronome === 'boolean') state.metronome = s.metronome;
       if (typeof s.countIn === 'boolean') state.countIn = s.countIn;
       if (typeof s.octaveStrict === 'boolean') state.octaveStrict = s.octaveStrict;
+      if (typeof s.recordOn === 'boolean') state.recordOn = s.recordOn;
       if (s.inputSource === 'mic' || s.inputSource === 'midi') state.inputSource = s.inputSource;
       if (s.mistakes && typeof s.mistakes === 'object') {
         for (var pc in s.mistakes) {
@@ -138,7 +139,9 @@
         });
       }
       if (s.stats && typeof s.stats === 'object') {
-        ['attempts', 'correct', 'firstTry', 'stars', 'currentStreak', 'bestStreak', 'fullCorrect'].forEach(function (k) {
+        ['attempts', 'correct', 'firstTry', 'stars', 'currentStreak', 'bestStreak', 'fullCorrect',
+         'followRuns', 'followStars', 'followPerfect', 'trainRuns', 'trainStars', 'trainPerfect'
+        ].forEach(function (k) {
           state.stats[k] = toNum(s.stats[k]);
         });
         // 老版本只有 total（= 答对题数）：迁移为 correct，attempts 至少等于它
@@ -246,9 +249,45 @@
   /** 题目答案的按钮索引：白键 0..6，黑键 7..11（仅 88 键难度含黑键） */
   function answerIndexOf(midi) {
     var cfg = activePracticeConfig();
-    if (cfg.difficulty === 'full') return Core.SEMI_INDEX[midi % 12];
+    // 黑键在 12 键模式下按半音类；7 键模式没有黑键选项，退回下方白键
+    if (cfg.difficulty === 'full' || (reviewDrill && reviewDrill.hasBlack)) {
+      return Core.SEMI_INDEX[((midi % 12) + 12) % 12];
+    }
     var dia = Core.midiToDia(midi);
+    if (dia === null) dia = Core.midiToDia(midi - 1);   // 黑键取下方白键
     return ((dia % 7) + 7) % 7;
+  }
+
+  /** 错题专项专用按钮：黑键题给 12 个选项 */
+  function buildReviewAnswerButtons() {
+    var box = $('answerButtons');
+    box.innerHTML = '';
+    var full = !!(reviewDrill && reviewDrill.hasBlack);
+    var count = full ? 12 : 7;
+    var names = full
+      ? (state.naming === 'letter' ? Core.LETTER_12 : Core.SOLFEGE_12)
+      : (state.naming === 'letter' ? Core.LETTERS : Core.SOLFEGE);
+    box.className = 'answer-grid cols-' + count;
+    for (var i = 0; i < count; i++) {
+      var b = document.createElement('button');
+      b.className = 'answer-btn';
+      b.dataset.idx = i;
+      b.textContent = names[i];
+      b.addEventListener('click', function () { submitAnswer(parseInt(this.dataset.idx, 10), 'idx'); });
+      box.appendChild(b);
+    }
+  }
+
+  /** 音级的显示名（黑键显示为「下方白键♯」） */
+  function pitchClassName(pc) {
+    var NATURAL = { 0: 0, 2: 1, 4: 2, 5: 3, 7: 4, 9: 5, 11: 6 };
+    var FLAT_TO_NAT = { 1: 0, 3: 1, 6: 3, 8: 4, 10: 5 };
+    var n = ((pc % 12) + 12) % 12;
+    if (NATURAL[n] !== undefined) {
+      return Core.LETTERS[NATURAL[n]] + ' · ' + Core.SOLFEGE[NATURAL[n]];
+    }
+    var base = FLAT_TO_NAT[n];
+    return Core.LETTERS[base] + '♯';
   }
 
   /** 迷你键盘范围（练习页作答区） */
@@ -347,9 +386,17 @@
     $('placeConfirm').disabled = false;
   }
 
+  /** 解绑放音符的谱面点击（离开该模式时调用） */
+  function unbindPlaceStaff() {
+    var wrap = $('practiceStaff');
+    if (wrap) wrap.onclick = null;
+  }
+
   function bindPlaceStaff() {
     var wrap = $('practiceStaff');
     wrap.onclick = function (ev) {
+      var cfg = activePracticeConfig();
+      if (cfg.mode !== 'place') return;   // 已切到别的模式，忽略残留点击
       var svg = wrap.querySelector('svg');
       if (!svg || busy || !question) return;
       var rect = svg.getBoundingClientRect();
@@ -392,6 +439,7 @@
     Staff.renderStaff($('practiceStaff'), { clef: question.clef, noteX: 320, notes: notes });
     renderAnswerArea();
     // 课程练习中隐藏模式切换（模式由课程固定）
+    if (cfg.mode !== 'place') unbindPlaceStaff();
     $('segMode').style.display = courseActive ? 'none' : '';
     $('placeConfirmWrap').style.display = cfg.mode === 'place' ? '' : 'none';
     $('replayBtn').style.display = cfg.mode === 'listen' ? '' : 'none';
@@ -461,9 +509,10 @@
       if (k) k.classList.add('wrong');
     } else if (type === 'semi') {
       // 快捷键答错：标红该半音类的第一个键
+      var pc = SEMI_TO_PC[value];
       var all = answerKeyboard ? answerKeyboard.root.querySelectorAll('.key') : [];
       for (var i = 0; i < all.length; i++) {
-        if (parseInt(all[i].dataset.midi, 10) % 12 === value) { all[i].classList.add('wrong'); break; }
+        if (parseInt(all[i].dataset.midi, 10) % 12 === pc) { all[i].classList.add('wrong'); break; }
       }
     }
   }
@@ -511,9 +560,8 @@
       }
     } else if (type === 'midi') {
       guessedMidi = value;
-    } else { // 'semi'：快捷键按的是半音类（midi%12）
-      var SEMI_TO_PC2 = [0, 2, 4, 5, 7, 9, 11, 1, 3, 6, 8, 10];
-      guessedMidi = targetMidi - (targetMidi % 12) + SEMI_TO_PC2[value];
+    } else { // 'semi'：快捷键给的是按钮索引，转成半音类
+      guessedMidi = targetMidi - (targetMidi % 12) + SEMI_TO_PC[value];
     }
     var diff = guessedMidi - targetMidi;
     if (diff === 0) return '';
@@ -544,11 +592,14 @@
     return Math.abs(midi - target) <= 0.5;
   }
 
+  /** 按钮索引 → 半音类（与 SEMI_INDEX 互逆） */
+  var SEMI_TO_PC = [0, 2, 4, 5, 7, 9, 11, 1, 3, 6, 8, 10];
+
   function submitAnswer(value, type) {
     if (busy || !question) return;
     var ok = type === 'idx' ? (value === answerIndexOf(question.midi))
       : type === 'midi' ? pitchAnswerOk(value, question.midi)
-      : (value === question.midi % 12);
+      : (SEMI_TO_PC[value] === question.midi % 12);   // 快捷键：按钮索引转半音类
     var correctName = answerLabel(answerIndexOf(question.midi));
 
     if (ok) {
@@ -651,6 +702,9 @@
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     var k = e.key.toLowerCase();
 
+    // 答题快捷键只在练习页生效，避免在设置/曲库等页面误答题
+    var onPractice = document.getElementById('page-practice').classList.contains('active');
+
     // 训练营：节奏打拍（空格）与视奏作答（A–J 白键）
     if (document.getElementById('page-train').classList.contains('active')) {
       if (trainTab === 'rhythm' && (k === ' ' || k === 'spacebar')) {
@@ -675,6 +729,8 @@
       return;
     }
 
+    if (!onPractice) return;
+
     var cfg = activePracticeConfig();
     if (cfg.mode === 'place') {
       if (k === 'enter' && placeMidi !== null) { e.preventDefault(); submitAnswer(placeMidi, 'midi'); }
@@ -689,6 +745,8 @@
       var semi = KEYMAP_12[k];
       if (semi !== undefined) { e.preventDefault(); submitAnswer(semi, 'semi'); }
     }
+    // 注：KEYMAP_12 给出的是按钮索引（0-6 白键 / 7-11 黑键），
+    // submitAnswer 的 'semi' 分支会把它还原成半音类后再比较。
   }
 
   /* ---------- 学习模式 ---------- */
@@ -853,6 +911,7 @@
 
   /* ---------- 导航 ---------- */
   function switchPage(name) {
+    if (courseDoneTimer) { clearTimeout(courseDoneTimer); courseDoneTimer = null; }
     document.querySelectorAll('.nav-tab').forEach(function (t) {
       var on = t.dataset.page === name;
       t.classList.toggle('active', on);
@@ -862,17 +921,29 @@
     document.querySelectorAll('.page').forEach(function (p) {
       p.classList.toggle('active', p.id === 'page-' + name);
     });
-    if (name !== 'songs') stopAllAudio();   // 离开曲谱页：停止播放、麦克风、节拍器
+    if (name !== 'songs') {
+      stopAllAudio();                       // 离开曲谱页：停止播放、麦克风、节拍器
+      if (songQuizTimer) { clearTimeout(songQuizTimer); songQuizTimer = null; }
+      songQuiz = null;
+      var qa = $('songQuizArea');
+      if (qa) qa.style.display = 'none';
+    }
     if (name === 'courses') showCourseList();
     if (name === 'songs') showSongList();
     if (name === 'train') renderTrainPage();
+    else stopTrainSessions();   // 离开训练营：停止视奏倒计时与节奏练习
     if (name === 'weekly') { renderChallenge(); renderWeekly(); }
     else pauseChallengeTimer();   // 离开周报页：暂停挑战倒计时
   }
 
   // 切到后台时停止采集，避免麦克风常开与耗电
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { stopAllAudio(); pauseChallengeTimer(); }
+    if (document.hidden) {
+      stopAllAudio();
+      pauseChallengeTimer();
+    } else if (challengeRun) {
+      startChallengeTimer();   // 回到前台：恢复倒计时
+    }
   });
 
   /* ---------- 跟练（唱谱 / 跟弹，实时纠错引擎） ----------
@@ -884,6 +955,16 @@
   var BPM_OPTIONS = [50, 60, 70, 80, 90, 100, 110, 120];
 
   function startPractice(song, mode) {
+    // 已在跟练中：先把上一轮的定时器/采集停干净，避免节拍器叠加
+    if (practiceSession) {
+      stopMetronome();
+      if (practiceSession.midiTick) { clearInterval(practiceSession.midiTick); practiceSession.midiTick = null; }
+      if (practiceSession.countInTimer) { clearTimeout(practiceSession.countInTimer); practiceSession.countInTimer = null; }
+      window.PitchDetector.stop();
+      if (window.MidiInput) window.MidiInput.disconnect();
+      practiceSession = null;
+    }
+    followFinishing = false;
     if (!window.PitchDetector || !window.PitchDetector.supported()) {
       alert('🎤 需要麦克风权限才能唱谱/跟弹。\n\n• 桌面端：用 Chrome / Edge / Safari 直接打开，或运行 node server.js\n• iPad：部署到 https 网站，或在 Safari 里打开 localhost\n• 局域网 http 不支持麦克风，请用 HTTPS 部署');
       return;
@@ -1157,6 +1238,7 @@
           renderPracticeView();
         },
         onError: function (err) {
+          if (!practiceSession) return;   // 已经离开跟练，忽略异步错误
           practiceSession.input = 'mic';
           var st = $('singStatus');
           if (st) {
@@ -1272,7 +1354,12 @@
   /* ---------- 节拍器 ---------- */
   function startMetronome() {
     if (!practiceSession) return;
-    stopMetronome();
+    // 只清理节拍器自己的定时器；不要调用 stopMetronome，
+    // 否则会连带清掉预备拍定时器，导致预备拍永远卡住
+    if (practiceSession.tickTimer) {
+      clearInterval(practiceSession.tickTimer);
+      practiceSession.tickTimer = null;
+    }
     practiceSession.beatCount = 0;
     beatTick();
     var period = 60000 / practiceSession.bpm;
@@ -1427,17 +1514,28 @@
   }
 
   /* ---------- 结算 ---------- */
+  var followFinishing = false;
+
   function finishPractice() {
     if (!practiceSession) return;
+    if (followFinishing) return;   // 防重入：尾帧/连点不应重复结算
+    followFinishing = true;
+    // 立刻停采集，避免延迟出报告期间又送进一帧
+    window.PitchDetector.stop();
+    if (window.MidiInput) window.MidiInput.disconnect();
     stopMetronome();
     // 录音停止是异步的（ondataavailable → onstop），稍等再出报告
     if (practiceSession.recording) {
       practiceSession.recording = false;
       if (window.MusicRecorder) window.MusicRecorder.stop();
-      setTimeout(function () { if (practiceSession) renderPracticeReport(); }, 350);
+      setTimeout(function () {
+        if (practiceSession) renderPracticeReport();
+        followFinishing = false;
+      }, 350);
       return;
     }
     renderPracticeReport();
+    followFinishing = false;
   }
 
   /** 生成跟练报告（拆出来是为了等录音落盘） */
@@ -1547,6 +1645,14 @@
     st.followRuns = (st.followRuns || 0) + 1;
     st.followStars = (st.followStars || 0) + stars;
     if (sum.pitchAccuracy >= 90) st.followPerfect = (st.followPerfect || 0) + 1;
+    // 计入练习记录，否则家长周报里看不到跟练
+    if (window.MusicStats) {
+      state.history = state.history || {};
+      window.MusicStats.recordDay(state.history, 'follow', {
+        correct: sum.hits || 0,
+        total: sum.total || 0
+      });
+    }
     save();
     if (gamify) {
       gamify.addXp(3 + stars);
@@ -1593,6 +1699,7 @@
   var songPlaying = false;
   var songTimer = null;
   var songQuiz = null; // { midi, idx, hasSharp }
+  var songQuizTimer = null;
 
   function allSongs() {
     return window.SongData.SONGS.concat(window.LibraryData ? window.LibraryData.LIBRARY : []);
@@ -1793,6 +1900,7 @@
   }
 
   function startSongQuiz(s) {
+    if (songQuizTimer) { clearTimeout(songQuizTimer); songQuizTimer = null; }
     stopSong();
     var hasSharp = window.SongData.songHasSharp(s);
     $('songQuizArea').style.display = '';
@@ -1831,7 +1939,12 @@
         ? (state.naming === 'letter' ? Core.LETTER_12 : Core.SOLFEGE_12)[ans]
         : Core.label(songQuiz.midi, state.naming);
       $('songQuizHint').textContent = '答对啦！这个音是 ' + name + '（曲子第 ' + (songQuiz.idx + 1) + ' 个音），再来一个～';
-      setTimeout(function () { if (currentSongId) startSongQuiz(songById(currentSongId)); }, 1300);
+      songQuizTimer = setTimeout(function () {
+        songQuizTimer = null;
+        if (currentSongId && document.getElementById('page-songs').classList.contains('active')) {
+          startSongQuiz(songById(currentSongId));
+        }
+      }, 1300);
     } else {
       btns[idx].classList.add('wrong');
       btns[idx].disabled = true;
@@ -1971,14 +2084,21 @@
 
   function answerChallenge(i) {
     if (!challengeRun) return;
+    if (challengeRun.locked) return;   // 防连点：一次点击只答一题
+    challengeRun.locked = true;
     var q = challengeRun.challenge.questions[challengeRun.idx];
     challengeRun.answers[challengeRun.idx] = i;
     challengeRun.idx++;
     if (state.sound) {
       if (i === q.answer) Audio.playDing(76); else Audio.playNudge();
     }
-    if (challengeRun.idx >= challengeRun.challenge.questions.length) finishChallenge();
-    else renderChallengeRun();
+    if (challengeRun.idx >= challengeRun.challenge.questions.length) {
+      finishChallenge();
+    } else {
+      renderChallengeRun();
+      // 等下一帧再解锁，挡住同一批点击事件（连点会打到下一题的按钮）
+      setTimeout(function () { if (challengeRun) challengeRun.locked = false; }, 120);
+    }
   }
 
   function finishChallenge() {
@@ -2158,6 +2278,15 @@
   var theoryState = null;    // { cats, qs, idx, correct, wrong }
   var rhythmState = null;    // { level, rhythm, taps, startAt, raf }
 
+  /** 离开训练营时停止所有进行中的训练（避免在别的页面静默记成绩） */
+  function stopTrainSessions() {
+    if (sightState && sightState.timer) {
+      clearInterval(sightState.timer);
+      sightState.timer = null;
+    }
+    if (typeof stopRhythm === 'function') stopRhythm();
+  }
+
   function renderTrainPage() {
     renderSightControls();
     renderTheoryCats();
@@ -2193,11 +2322,7 @@
     }
     $('reviewDrillBtn').disabled = false;
     box.innerHTML = spots.map(function (sp) {
-      var letter = Core.LETTERS[((Core.midiToDia(sp.pitchClass + 60) % 7) + 7) % 7];
-      var solfege = Core.SOLFEGE[((Core.midiToDia(sp.pitchClass + 60) % 7) + 7) % 7];
-      var name = Core.midiToDia(sp.pitchClass + 60) === null
-        ? letter + '♯'
-        : letter + ' · ' + solfege;
+      var name = pitchClassName(sp.pitchClass);
       var rate = Math.round(sp.rate * 100);
       return '<div class="review-row">' +
         '<span class="review-name">' + name + '</span>' +
@@ -2212,6 +2337,7 @@
   function startReviewDrill() {
     var spots = window.MusicStats.weakSpots(state.mistakes || {}, 6);
     if (!spots.length) return;
+    if (courseActive) { courseActive = null; renderCourseBanner(); }
     reviewDrill = {
       pool: spots.map(function (sp) { return sp.pitchClass; }),
       clef: spots[0].clef || 'treble',
@@ -2244,7 +2370,9 @@
     var noteOpt = { midi: midi };
     if (Core.midiToDia(midi) === null) noteOpt = { midi: midi - 1, accidental: 1 };
     Staff.renderStaff($('practiceStaff'), { clef: question.clef, noteX: 320, notes: [noteOpt] });
-    state.mode = 'name';
+    // 黑键题要用 12 个选项，否则「Do」会被判成正确答案
+    reviewDrill.hasBlack = Core.midiToDia(midi) === null;
+    // 只改界面选中态，不写 state.mode，避免把孩子的偏好永久改成「点音名」
     $('segMode').querySelectorAll('.seg').forEach(function (b) {
       b.classList.toggle('active', b.dataset.mode === 'name');
       b.setAttribute('aria-pressed', b.dataset.mode === 'name' ? 'true' : 'false');
@@ -2253,7 +2381,7 @@
     $('placeConfirmWrap').style.display = 'none';
     $('replayBtn').style.display = 'none';
     $('placeLabel').textContent = '这个音符是？（错题专项）';
-    buildAnswerButtons();
+    buildReviewAnswerButtons();
     $('answerButtons').style.display = '';
     $('keyboardAnswer').style.display = 'none';
     setFeedback('idle', '错题专项：还剩 ' + reviewDrill.remaining + ' 题');
@@ -2392,7 +2520,8 @@
   /** 用户主动结束（未弹完也算一次成绩） */
   function abortSight() {
     if (!sightState) return;
-    if (!sightState.played.length && !sightState.startedAt) {
+    // 一个音都没弹就点结束：直接放弃，不记成绩
+    if (!sightState.played.length) {
       stopSight();
       sightState = null;
       $('sightStartBtn').textContent = '▶ 开始视奏';
@@ -2421,7 +2550,7 @@
     $('sightTimer').style.display = 'none';
     $('sightStartBtn').textContent = '▶ 再来一段';
     $('sightStatus').textContent = '';
-    recordTrainResult('sight', stars, res.accuracy);
+    recordTrainResult('sight', stars, res.accuracy, { correct: res.hits, total: res.total });
     sightState.played = res.hits ? sightState.played : sightState.played;
     sightState.timer = null;
     if (state.sound) Audio.playDing(76);
@@ -2470,7 +2599,8 @@
           '<div class="train-result-body">答对 ' + theoryState.correct + ' / ' + theoryState.qs.length + '（' + rate + '%）</div>' +
           '<div class="train-result-tip">' + (rate >= 90 ? '乐理小达人！' : '把答错的题再看一遍解析，会更牢。') + '</div>' +
         '</div>';
-      recordTrainResult('theory', stars, rate);
+      recordTrainResult('theory', stars, rate,
+        { correct: theoryState.correct, total: theoryState.qs.length });
       return;
     }
     var q = theoryState.qs[theoryState.idx];
@@ -2610,7 +2740,7 @@
   }
 
   /** 训练结果计入统计与 XP（与跟练同一套激励） */
-  function recordTrainResult(kind, stars, accuracy) {
+  function recordTrainResult(kind, stars, accuracy, counts) {
     var st = state.stats;
     st.trainRuns = (st.trainRuns || 0) + 1;
     st.trainStars = (st.trainStars || 0) + stars;
@@ -2619,7 +2749,10 @@
     if (!state.trainBest[kind] || stars > state.trainBest[kind]) state.trainBest[kind] = stars;
     if (window.MusicStats) {
       state.history = state.history || {};
-      window.MusicStats.recordDay(state.history, kind, { correct: accuracy, total: 100 });
+      // 用真实题数记账；没有题数时（如节奏）只记次数
+      window.MusicStats.recordDay(state.history, kind, counts
+        ? { correct: counts.correct, total: counts.total }
+        : { correct: 0, total: 0 });
     }
     save();
     if (gamify) {
@@ -2632,6 +2765,7 @@
 
   /* ---------- 课程（闯关） ---------- */
   var courseActive = null;   // { id, correct, firstTry }
+  var courseDoneTimer = null;
   var currentCourseId = null;
   var currentLine = null;    // 当前教材线路
 
@@ -2870,7 +3004,10 @@
     courseActive = null;
     renderCourseBanner();
     gamify.celebrate('🎓 过关啦！', msg, '🏅');
-    setTimeout(function () {
+    courseDoneTimer = setTimeout(function () {
+      courseDoneTimer = null;
+      // 孩子已经自己切走了，就不要把人拽回来
+      if (!document.getElementById('page-practice').classList.contains('active')) return;
       switchPage('courses');
       showCourseList();
       renderQuestion();
@@ -3029,6 +3166,7 @@
     var target = activeProfile();
     resetStateToDefaults();
     if (target && target.data) applyDataToState(target.data);
+    resetLiveSession();
     save();
     refreshAllUI();
     setFeedback('idle', '已切换到 ' + target.name);
@@ -3060,6 +3198,20 @@
   }
 
   /** 切换档案后刷新所有界面 */
+  /** 切换档案/删除档案时，清理所有"进行中"的会话，避免串到另一个小朋友身上 */
+  function resetLiveSession() {
+    if (challengeRun) {
+      if (challengeRun.timer) clearInterval(challengeRun.timer);
+      challengeRun = null;
+    }
+    courseActive = null;
+    reviewDrill = null;
+    if (typeof stopPractice === 'function') {
+      try { stopPractice(false); } catch (e) {}
+    }
+    renderCourseBanner();
+  }
+
   function refreshAllUI() {
     applyTheme();
     applySoundBtn();
@@ -3109,20 +3261,28 @@
     var p = window.MusicProfiles.getProfile(profileStore, id);
     if (!p) return;
     if (!window.confirm('确定删除「' + p.name + '」的全部进度吗？此操作不可恢复。')) return;
+
+    var wasActive = (id === profileStore.activeId);
+    if (!wasActive) save();   // 删别的档案前先把当前进度存好
+
     var r = window.MusicProfiles.removeProfile(profileStore, id);
     if (!r.ok) {
       setFeedback('idle', r.error);
       return;
     }
-    save();
-    if (id !== profileStore.activeId) {
+
+    if (!wasActive) {
+      save();
       renderProfiles();
       return;
     }
-    // 删的是当前档案：载入接替的档案
+
+    // 删的是当前档案：此时 state 仍是被删档案的数据，
+    // 必须先清空再载入接替者，否则 save() 会把旧数据写进存活档案。
     var target = activeProfile();
     resetStateToDefaults();
     if (target && target.data) applyDataToState(target.data);
+    resetLiveSession();       // 清理进行中的挑战/课程/专项练习
     save();
     refreshAllUI();
   }
@@ -3198,6 +3358,25 @@
     if (data && data.profiles && data.activeId && data.profiles[data.activeId]) {
       data = data.profiles[data.activeId].data;
     }
+    // 旧备份里的课程 ID 是数字（1..30），先迁移成新格式，否则进度会丢
+    if (data && data.courses) {
+      var migratedCourses = {};
+      Object.keys(data.courses).forEach(function (cid) {
+        var cc = data.courses[cid];
+        if (!cc || !cc.done) return;
+        var newId = cid;
+        if (/^d+$/.test(cid)) {
+          var num = parseInt(cid, 10);
+          if (num >= 1 && num <= 12) newId = 'jichu-' + String(num).padStart(2, '0');
+          else if (num >= 13 && num <= 22) newId = 'baier-' + String(num - 12).padStart(2, '0');
+          else if (num >= 23 && num <= 30) newId = 'hanon-' + String(num - 22).padStart(2, '0');
+          else return;
+        }
+        migratedCourses[newId] = { done: true, stars: Math.max(1, Math.min(3, toNum(cc.stars) || 1)) };
+      });
+      data = JSON.parse(JSON.stringify(data));
+      data.courses = migratedCourses;
+    }
     var next = mode === 'merge'
       ? window.MusicBackup.mergeState(state, data)
       : window.MusicBackup.replaceState(data);
@@ -3269,6 +3448,7 @@
       getPracticeDifficulty: function () { return activePracticeConfig().difficulty; }
     });
 
+    gamify.ensureDaily();   // 打开应用就检查跨天，避免只有答题才刷新任务
     applyTheme();
     applySoundBtn();
     gamify.updateStatsUI();

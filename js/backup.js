@@ -130,6 +130,29 @@
     return out;
   }
 
+  /** 合并每日挑战：全对天数取大、次数相加、历史按日期合并 */
+  function mergeChallenge(a, b) {
+    if (!b) return clone(a) || {};
+    var out = clone(a) || {};
+    out.attempts = (Number(out.attempts) || 0) + (Number(b.attempts) || 0);
+    out.best = Math.max(Number(out.best) || 0, Number(b.best) || 0);
+    out.perfectDays = Math.max(Number(out.perfectDays) || 0, Number(b.perfectDays) || 0);
+    if (b.lastDate && (!out.lastDate || b.lastDate > out.lastDate)) out.lastDate = b.lastDate;
+    var hist = clone(out.history) || {};
+    var inc = b.history || {};
+    Object.keys(inc).forEach(function (d) {
+      var cur = hist[d], add = inc[d];
+      if (!cur) { hist[d] = clone(add); return; }
+      if (add && add.perfect && !cur.perfect) hist[d] = clone(add);
+      else if (add && !cur.perfect) {
+        hist[d] = { correct: Math.max(Number(cur.correct) || 0, Number(add.correct) || 0),
+                    total: Number(add.total) || Number(cur.total) || 0, perfect: false };
+      }
+    });
+    out.history = hist;
+    return out;
+  }
+
   /** 合并 gamify：XP 取大，徽章取并集，连续天数取大 */
   function mergeGamify(a, b) {
     var out = clone(a) || {};
@@ -161,6 +184,7 @@
     out.history = mergeHistory(cur.history, inc.history);
     out.gamify = mergeGamify(cur.gamify, inc.gamify);
     out.trainBest = mergeStats(cur.trainBest, inc.trainBest);
+    out.challenge = mergeChallenge(cur.challenge, inc.challenge);
     return out;
   }
 
@@ -191,6 +215,7 @@
     fileName: fileName,
     parse: parse,
     mergeState: mergeState,
+    mergeChallenge: mergeChallenge,
     replaceState: replaceState,
     overview: overview
   };
