@@ -1,3 +1,4 @@
 node_modules/
 .reasonix/
 .tmp-*.png
+.tmp-*.json

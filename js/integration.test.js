@@ -928,6 +928,24 @@ const savedData = (win) => {
   window.PitchDetector.start = origStart;
   window.PitchDetector.stop = origStop;
 
+  // ---------- 回归：学习页每个音符都可点击 ----------
+  {
+    click(document.querySelector('.nav-tab[data-page="learn"]'));
+    await sleep(50);
+    const notes = [...document.querySelectorAll('#learnStaff .note')];
+    assert.ok(notes.length >= 13, '学习页有完整音阶');
+    assert.ok(notes.every(n => n.querySelector('.note-hit')), '每个可点音符都有透明热区');
+    // 点第 1 个音符（此前因符头太窄点不中）
+    const first = notes[0];
+    click(first.querySelector('.note-hit'));
+    await sleep(30);
+    assert.ok($('learnKeyInfo').textContent.length > 0, '点第一个音符能显示音名');
+    // 热区足够大
+    const hit = notes[0].querySelector('.note-hit');
+    assert.strictEqual(hit.getAttribute('width'), '30', '热区宽度 30');
+    assert.strictEqual(hit.getAttribute('height'), '72', '热区高度 6 个线距');
+  }
+
   // ---------- 每日挑战 ----------
   {
     click(document.querySelector('.nav-tab[data-page="weekly"]'));
@@ -941,6 +959,21 @@ const savedData = (win) => {
     assert.ok(document.querySelector('.ch-head'), '进入挑战');
     assert.ok(document.querySelector('.ch-timer').textContent.includes('秒'), '显示倒计时');
     assert.ok(document.querySelector('#chStaff .note') || document.querySelector('.ch-q'), '题目已渲染');
+
+    // 切页暂停倒计时（避免在别的页面超时被静默判 0 分）
+    {
+      const r0 = window.__musicApp.challengeRun();
+      const remain0 = r0.remaining;
+      click(document.querySelector('.nav-tab[data-page="settings"]'));
+      await sleep(50);
+      assert.ok(r0.paused, '离开周报页后倒计时暂停');
+      assert.strictEqual(r0.timer, null, '计时器已清除');
+      click(document.querySelector('.nav-tab[data-page="weekly"]'));
+      await sleep(50);
+      assert.ok(!r0.paused, '回到周报页恢复计时');
+      assert.ok(r0.timer, '计时器重新启动');
+      assert.strictEqual(r0.remaining, remain0, '暂停期间不扣时间');
+    }
 
     // 全部答对
     const run = window.__musicApp.challengeRun();

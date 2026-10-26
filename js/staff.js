@@ -67,6 +67,14 @@
       g.setAttribute('tabindex', '0');
       g.setAttribute('aria-label', opts.ariaLabel || ('音符 ' + midi));
       g.style.cursor = 'pointer';
+      // 透明热区：<g> 本身没有可点击面积，只靠窄小的符头很难点中，
+      // 加一块覆盖音符上下的矩形，让孩子容易点
+      var hit = el('rect', {
+        x: x - 15, y: y - 3 * SPACING, width: 30, height: 6 * SPACING,
+        'class': 'note-hit', fill: 'transparent'
+      }, g);
+      hit.setAttribute('pointer-events', 'all');
+      g.insertBefore(hit, g.firstChild);
     }
     var cls = 'note';
     if (opts.bounce) cls += ' note-blink'; // 原地闪烁反馈

@@ -867,11 +867,12 @@
     if (name === 'songs') showSongList();
     if (name === 'train') renderTrainPage();
     if (name === 'weekly') { renderChallenge(); renderWeekly(); }
+    else pauseChallengeTimer();   // 离开周报页：暂停挑战倒计时
   }
 
   // 切到后台时停止采集，避免麦克风常开与耗电
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) stopAllAudio();
+    if (document.hidden) { stopAllAudio(); pauseChallengeTimer(); }
   });
 
   /* ---------- 跟练（唱谱 / 跟弹，实时纠错引擎） ----------
@@ -1851,7 +1852,11 @@
   function renderChallenge() {
     var box = $('challengeBody');
     if (!box || !window.MusicChallenge) return;
-    if (challengeRun) { renderChallengeRun(); return; }
+    if (challengeRun) {
+      startChallengeTimer();   // 回到周报页：恢复倒计时
+      renderChallengeRun();
+      return;
+    }
 
     var today = window.MusicChallenge.todayKey();
     var cs = challengeState();
@@ -1892,19 +1897,33 @@
       naming: state.naming
     });
     challengeRun = {
-      challenge: ch, idx: 0, answers: [], remaining: ch.seconds,
-      timer: setInterval(function () {
-        if (!challengeRun) return;
-        challengeRun.remaining--;
-        var t = $('chTime');
-        if (t) {
-          t.textContent = '⏱ ' + Math.max(0, challengeRun.remaining) + ' 秒';
-          t.classList.toggle('urgent', challengeRun.remaining <= 10);
-        }
-        if (challengeRun.remaining <= 0) finishChallenge();
-      }, 1000)
+      challenge: ch, idx: 0, answers: [], remaining: ch.seconds, timer: null, paused: false
     };
+    startChallengeTimer();
     renderChallengeRun();
+  }
+
+  /** 启动/恢复挑战倒计时 */
+  function startChallengeTimer() {
+    if (!challengeRun || challengeRun.timer) return;
+    challengeRun.paused = false;
+    challengeRun.timer = setInterval(function () {
+      if (!challengeRun || challengeRun.paused) return;
+      challengeRun.remaining--;
+      var t = $('chTime');
+      if (t) {
+        t.textContent = '⏱ ' + Math.max(0, challengeRun.remaining) + ' 秒';
+        t.classList.toggle('urgent', challengeRun.remaining <= 10);
+      }
+      if (challengeRun.remaining <= 0) finishChallenge();
+    }, 1000);
+  }
+
+  /** 暂停倒计时（离开周报页时调用，避免在别的页面超时被静默判 0 分） */
+  function pauseChallengeTimer() {
+    if (!challengeRun) return;
+    if (challengeRun.timer) { clearInterval(challengeRun.timer); challengeRun.timer = null; }
+    challengeRun.paused = true;
   }
 
   function renderChallengeRun() {
