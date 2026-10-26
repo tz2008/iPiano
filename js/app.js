@@ -1612,8 +1612,10 @@
       window.LibraryData.LIBRARY.forEach(function (s) {
         (byBook[s.book] = byBook[s.book] || []).push(s);
       });
+      // 教材类书籍加「教材」前缀；曲集类（民歌/名曲/基本功）直接用书名
+      var TEXTBOOK = /^(小汤|拜厄|车尔尼|哈农|钢琴基础教程)/;
       Object.keys(byBook).forEach(function (b) {
-        groups.push({ name: '教材 · ' + b, items: byBook[b] });
+        groups.push({ name: (TEXTBOOK.test(b) ? '教材 · ' : '') + b, items: byBook[b] });
       });
     }
     groups.forEach(function (g) {

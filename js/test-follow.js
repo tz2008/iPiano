@@ -289,7 +289,7 @@ t('节奏型生成合法', () => {
 
 /* ---------- 教材曲库 ---------- */
 t('曲库：结构合法、ID 唯一', () => {
-  assert.ok(L.LIBRARY.length >= 46, '曲目 >= 46，实际 ' + L.LIBRARY.length);
+  assert.ok(L.LIBRARY.length >= 91, '曲目 >= 91，实际 ' + L.LIBRARY.length);
   const ids = new Set();
   L.LIBRARY.forEach(s => {
     assert.ok(!ids.has(s.id), 'ID 唯一：' + s.id);
@@ -314,6 +314,10 @@ t('曲库：分类覆盖三本教材', () => {
   assert.ok(b.includes('小汤 1') && b.includes('拜厄') && b.includes('车尔尼 599'), '分类：' + b.join(','));
   assert.ok(b.includes('小汤 3'), '含扩充的小汤 3');
   assert.ok(b.includes('小汤 4'), '含扩充的小汤 4');
+  assert.ok(b.includes('世界民歌'), '含世界民歌');
+  assert.ok(b.includes('中国民歌'), '含中国民歌');
+  assert.ok(b.includes('古典名曲'), '含古典名曲');
+  assert.ok(b.includes('音阶琶音'), '含音阶琶音');
 });
 t('曲库：绝大多数曲目有左手伴奏', () => {
   const withBass = L.LIBRARY.filter(s => s.bass && s.bass.length).length;
