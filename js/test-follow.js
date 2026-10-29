@@ -190,6 +190,101 @@ t('节奏：抢拍 / 拖拍被识别', () => {
   assert.ok(r.early > 0 || r.late > 0, '应识别出节奏偏差');
 });
 
+/* ---------- 力度与时值（MIDI） ---------- */
+t('力度：稳定且适中 → 满分', () => {
+  const seq = [60, 62, 64, 65].map(m => ({ midis: [m], beats: 1 }));
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62, 64, 65].forEach((m, i) => {
+    F.feed(run, m, i * 1000, { velocity: 0.6 });
+    F.feed(run, m, i * 1000 + 100, { velocity: 0.6 });
+  });
+  const d = F.dynamicsStats(run);
+  assert.ok(d.hasData);
+  assert.strictEqual(d.level, 'ok');
+  assert.strictEqual(d.accuracy, 100);
+  assert.strictEqual(d.count, 4);
+});
+t('力度：整体偏轻被识别', () => {
+  const seq = [60, 62, 64].map(m => ({ midis: [m], beats: 1 }));
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62, 64].forEach((m, i) => {
+    F.feed(run, m, i * 1000, { velocity: 0.15 });
+    F.feed(run, m, i * 1000 + 100, { velocity: 0.15 });
+  });
+  const d = F.dynamicsStats(run);
+  assert.strictEqual(d.level, 'soft');
+  assert.ok(d.accuracy < 100);
+});
+t('力度：忽轻忽重被识别', () => {
+  const seq = [60, 62, 64, 65].map(m => ({ midis: [m], beats: 1 }));
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [0.2, 0.9, 0.2, 0.9].forEach((v, i) => {
+    F.feed(run, seq[i].midis[0], i * 1000, { velocity: v });
+    F.feed(run, seq[i].midis[0], i * 1000 + 100, { velocity: v });
+  });
+  const d = F.dynamicsStats(run);
+  assert.ok(['uneven', 'loud'].includes(d.level), '实际 ' + d.level);
+  assert.ok(d.std > 0.2, '标准差应较大，实际 ' + d.std);
+});
+t('力度：麦克风（无力度）不产生数据', () => {
+  const seq = [60, 62].map(m => ({ midis: [m], beats: 1 }));
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62].forEach((m, i) => { F.feed(run, m, i * 1000); F.feed(run, m, i * 1000 + 100); });
+  assert.strictEqual(F.dynamicsStats(run).hasData, false);
+});
+t('时值：按住整拍算准确', () => {
+  const seq = [{ midis: [60], beats: 1 }, { midis: [62], beats: 1 }, { midis: [64], beats: 1 }];
+  const run = F.createRun({ seq: seq, bpm: 60 });   // 1 拍 = 1000ms
+  [60, 62, 64].forEach((m, i) => {
+    F.feed(run, m, i * 1000, { velocity: 0.6 });
+    F.feed(run, m, i * 1000 + 100, { velocity: 0.6 });
+    F.noteOff(run, m, i * 1000 + 900);              // 按住 900ms
+  });
+  const a = F.articulationStats(run, 1);
+  assert.ok(a.hasData);
+  assert.strictEqual(a.count, 3);
+  assert.strictEqual(a.short, 0);
+  assert.strictEqual(a.accuracy, 100);
+});
+t('时值：按太短被识别', () => {
+  const seq = [{ midis: [60], beats: 1 }, { midis: [62], beats: 1 }];
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62].forEach((m, i) => {
+    F.feed(run, m, i * 1000, { velocity: 0.6 });
+    F.feed(run, m, i * 1000 + 100, { velocity: 0.6 });
+    F.noteOff(run, m, i * 1000 + 150);              // 只按住 150ms
+  });
+  const a = F.articulationStats(run, 1);
+  assert.strictEqual(a.short, 2);
+  assert.strictEqual(a.accuracy, 0);
+});
+t('时值：整体慢一倍仍算准（速度归一化）', () => {
+  const seq = [{ midis: [60], beats: 1 }, { midis: [62], beats: 1 }];
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62].forEach((m, i) => {
+    F.feed(run, m, i * 2000, { velocity: 0.6 });
+    F.feed(run, m, i * 2000 + 100, { velocity: 0.6 });
+    F.noteOff(run, m, i * 2000 + 1800);             // 慢一倍，按住 1800ms
+  });
+  const a = F.articulationStats(run, 2);            // tempoRatio = 2
+  assert.strictEqual(a.accuracy, 100);
+});
+t('时值：麦克风（无抬键）不产生数据', () => {
+  const seq = [{ midis: [60], beats: 1 }, { midis: [62], beats: 1 }];
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62].forEach((m, i) => { F.feed(run, m, i * 1000); F.feed(run, m, i * 1000 + 100); });
+  assert.strictEqual(F.articulationStats(run, 1).hasData, false);
+});
+t('summary 汇总力度与时值，无数据时不计入星级', () => {
+  const seq = [{ midis: [60], beats: 1 }, { midis: [62], beats: 1 }];
+  const run = F.createRun({ seq: seq, bpm: 60 });
+  [60, 62].forEach((m, i) => { F.feed(run, m, i * 1000); F.feed(run, m, i * 1000 + 100); });
+  const sum = F.summary(run);
+  assert.strictEqual(sum.dynamics.hasData, false);
+  assert.strictEqual(sum.articulation.hasData, false);
+  assert.ok(sum.stars >= 1 && sum.stars <= 3);
+});
+
 /* ---------- 段落 ---------- */
 t('分段：按 4 小节切分', () => {
   const seq = [];

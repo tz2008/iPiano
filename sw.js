@@ -20,6 +20,7 @@ var ASSETS = [
   './js/backup.js',
   './js/weekly.js',
   './js/challenge.js',
+  './js/ear.js',
   './js/sight.js',
   './js/glyphs.js',
   './js/staff.js',

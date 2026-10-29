@@ -138,11 +138,12 @@ try {
       <div class="card">
         <div class="card-head">
           <span class="card-title">🎯 训练营</span>
-          <span class="card-sub">视奏、乐理、节奏，三项基本功</span>
+          <span class="card-sub">视奏 · 乐理 · 听音 · 节奏 · 错题本</span>
         </div>
         <div class="segmented train-tabs" id="trainTabs">
           <button class="seg active" data-tab="sight">👀 视奏</button>
           <button class="seg" data-tab="theory">🧠 乐理</button>
+          <button class="seg" data-tab="ear">🎧 听音</button>
           <button class="seg" data-tab="rhythm">👏 节奏</button>
           <button class="seg" data-tab="review">📕 错题本</button>
           <button class="seg" data-tab="history">📈 练习记录</button>
@@ -177,6 +178,24 @@ try {
             <button class="action-btn" id="theoryStartBtn">▶ 开始答题</button>
           </div>
           <div id="theoryBody" class="theory-body"></div>
+        </div>
+      </div>
+
+      <!-- 视唱练耳 -->
+      <div id="trainEar" class="train-pane" style="display:none">
+        <div class="card">
+          <div class="train-bar">
+            <div class="train-levels" id="earLevels">
+              <button class="seg" data-level="1">音程入门</button>
+              <button class="seg" data-level="2">音程进阶</button>
+              <button class="seg" data-level="3">大小三和弦</button>
+              <button class="seg" data-level="4">四种和弦</button>
+              <button class="seg" data-level="5">旋律走向</button>
+            </div>
+            <button class="action-btn" id="earStartBtn">▶ 开始听辨</button>
+          </div>
+          <p class="train-tip" id="earTip">点「开始听辨」先听一个音程，再选出它是几度。可以反复重听。</p>
+          <div id="earBody" class="ear-body"></div>
         </div>
       </div>
 
@@ -396,6 +415,7 @@ try {
 <script src="js/backup.js"></script>
 <script src="js/weekly.js"></script>
 <script src="js/challenge.js"></script>
+<script src="js/ear.js"></script>
 <script src="js/sight.js"></script>
 <script src="js/glyphs.js"></script>
 <script src="js/staff.js"></script>

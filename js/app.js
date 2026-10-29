@@ -24,6 +24,7 @@
     countIn: true,      // 跟练预备拍（一小节倒计时）
     sightLevel: 1,      // 视奏难度
     rhythmLevel: 1,     // 节奏难度
+    earLevel: 1,        // 听音难度 1–5
     trainBest: {},      // 各项训练最佳星级
     challenge: { lastDate: '', attempts: 0, best: 0, perfectDays: 0, history: {} }, // 每日挑战
     stats: { attempts: 0, correct: 0, firstTry: 0, stars: 0, currentStreak: 0, bestStreak: 0, fullCorrect: 0 },
@@ -133,8 +134,9 @@
       }
       if (s.sightLevel >= 1 && s.sightLevel <= 4) state.sightLevel = Math.floor(s.sightLevel);
       if (s.rhythmLevel >= 1 && s.rhythmLevel <= 3) state.rhythmLevel = Math.floor(s.rhythmLevel);
+      if (s.earLevel >= 1 && s.earLevel <= 5) state.earLevel = Math.floor(s.earLevel);
       if (s.trainBest && typeof s.trainBest === 'object') {
-        ['sight', 'theory', 'rhythm'].forEach(function (k) {
+        ['sight', 'theory', 'rhythm', 'ear'].forEach(function (k) {
           if (s.trainBest[k] >= 1 && s.trainBest[k] <= 3) state.trainBest[k] = Math.floor(s.trainBest[k]);
         });
       }
@@ -1219,17 +1221,20 @@
       }, 25);
       practiceSession.midiTick = midiTick;
       window.MidiInput.connect({
-        onNote: function (midi) {
+        onNote: function (midi, velocity) {
           if (!practiceSession) return;
           practiceSession.held = practiceSession.held || [];
           if (practiceSession.held.indexOf(midi) < 0) practiceSession.held.push(midi);
           practiceSession.held.sort(function (a, b) { return a - b; });
+          practiceSession.lastVelocity = velocity;
           onFollowMidi(collectionSnapshot(practiceSession));
         },
         onNoteOff: function (midi) {
           if (!practiceSession || !practiceSession.held) return;
           var k = practiceSession.held.indexOf(midi);
           if (k >= 0) practiceSession.held.splice(k, 1);
+          // 记录按住时长，用于时值/连奏评分
+          if (practiceSession.run) window.MusicFollow.noteOff(practiceSession.run, midi, Date.now());
           if (!practiceSession.held.length) onFollowMidi(null);
         },
         onDevices: function (names) {
@@ -1291,7 +1296,8 @@
   function onFollowMidi(input) {
     if (!practiceSession || !practiceSession.run) return;
     updateMeter(typeof input === 'number' ? input : null, currentTargetMidi());
-    var ev = window.MusicFollow.feed(practiceSession.run, input, Date.now());
+    var ev = window.MusicFollow.feed(practiceSession.run, input, Date.now(),
+      practiceSession.lastVelocity != null ? { velocity: practiceSession.lastVelocity } : null);
     if (ev) handleFollowEvent(ev);
     if (practiceSession.run.finished) finishPractice();
   }
@@ -1564,6 +1570,24 @@
       ? '节奏：准确 ' + rh.accuracy + '%（抢拍 ' + rh.early + ' 次、拖拍 ' + rh.late + ' 次，整体速度 ' + rh.tempoRatio + '×）'
       : '节奏：本次没有足够的对比数据';
 
+    // 力度与时值只有 MIDI 才有数据
+    var dyn = sum.dynamics, art = sum.articulation;
+    var dynLine = '';
+    if (dyn.hasData) {
+      var dynWord = dyn.level === 'soft' ? '整体偏轻，再用力一点'
+        : dyn.level === 'loud' ? '整体偏重，放松一点'
+        : dyn.level === 'uneven' ? '力度不够均匀'
+        : '力度稳定';
+      dynLine = '力度：平均 ' + Math.round(dyn.avg * 100) + '%，' + dynWord;
+    } else {
+      dynLine = '力度：需要 MIDI 键盘才能评估（麦克风测不到力度）';
+    }
+    var artLine = art.hasData
+      ? '时值：' + art.accuracy + '% 按住了应有长度' +
+        (art.short ? '（' + art.short + ' 个音太短）' : '') +
+        (art.long ? '（' + art.long + ' 个音拖太长）' : '')
+      : '时值：需要 MIDI 键盘才能评估';
+
     var area = $('singArea');
     area.innerHTML =
       '<div class="sing-done">' +
@@ -1577,10 +1601,18 @@
             '<i class="report-bar"><i style="width:' + (rh.hasData ? rh.accuracy : 0) + '%"></i></i></div>' +
           '<div class="report-row"><span>完整</span><b>' + sum.hits + '/' + sum.total + '</b>' +
             '<i class="report-bar"><i style="width:' + Math.round(sum.hits / Math.max(1, sum.total) * 100) + '%"></i></i></div>' +
+          '<div class="report-row"><span>力度</span><b>' +
+            (sum.dynamics.hasData ? sum.dynamics.accuracy + '%' : '—') + '</b>' +
+            '<i class="report-bar"><i style="width:' + (sum.dynamics.hasData ? sum.dynamics.accuracy : 0) + '%"></i></i></div>' +
+          '<div class="report-row"><span>时值</span><b>' +
+            (sum.articulation.hasData ? sum.articulation.accuracy + '%' : '—') + '</b>' +
+            '<i class="report-bar"><i style="width:' + (sum.articulation.hasData ? sum.articulation.accuracy : 0) + '%"></i></i></div>' +
         '</div>' +
         '<div class="sing-done-rate">' + sum.total + ' 个音 ｜ 错音 ' + sum.wrongNotes + ' 处 ｜ 漏音 ' + sum.missed +
           ' 处 ｜ 最高连对 ' + bestCombo + '</div>' +
         '<div class="sing-done-rate">' + rhythmLine + '</div>' +
+        '<div class="sing-done-rate">' + dynLine + '</div>' +
+        '<div class="sing-done-rate">' + artLine + '</div>' +
         (wrongList.length ? '<div class="sing-done-wrong">错音位置：第 ' + wrongList.join('、') + ' 个音</div>' : '') +
         (missedList.length ? '<div class="sing-done-wrong">漏音位置：第 ' + missedList.join('、') + ' 个音</div>' : '') +
         '<div class="sing-done-comment">' + comment + '</div>' +
@@ -2296,7 +2328,7 @@
 
   function showTrainTab(tab) {
     trainTab = tab;
-    ['sight', 'theory', 'rhythm', 'review', 'history'].forEach(function (t) {
+    ['sight', 'theory', 'ear', 'rhythm', 'review', 'history'].forEach(function (t) {
       var pane = $('train' + t.charAt(0).toUpperCase() + t.slice(1));
       if (pane) pane.style.display = t === tab ? '' : 'none';
     });
@@ -2306,8 +2338,165 @@
       b.setAttribute('aria-pressed', b.dataset.tab === tab ? 'true' : 'false');
     });
     if (tab !== 'sight' && sightState && sightState.timer) stopSight();
+    if (tab === 'ear') renderEarControls();
     if (tab === 'review') renderReview();
     if (tab === 'history') renderHistory();
+  }
+
+  /* ===== 视唱练耳 ===== */
+  var earState = null;   // { level, q, answered, correct, total, results }
+
+  function renderEarControls() {
+    var box = $('earLevels');
+    if (!box) return;
+    var lv = state.earLevel || 1;
+    box.querySelectorAll('.seg').forEach(function (b) {
+      var on = parseInt(b.dataset.level, 10) === lv;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    if (!box.__bound) {
+      box.__bound = true;
+      box.addEventListener('click', function (ev) {
+        var seg = ev.target.closest('.seg');
+        if (!seg) return;
+        state.earLevel = parseInt(seg.dataset.level, 10);
+        save();
+        renderEarControls();
+        if (earState) startEar();   // 换难度直接重开
+      });
+    }
+  }
+
+  function startEar() {
+    if (!window.MusicEar) return;
+    var level = state.earLevel || 1;
+    earState = { level: level, q: null, answered: false, correct: 0, total: 0, results: [] };
+    $('earStartBtn').textContent = '🔄 换一组';
+    nextEarQuestion();
+  }
+
+  function nextEarQuestion() {
+    if (!earState) return;
+    earState.answered = false;
+    var q = window.MusicEar.question({ level: earState.level });
+    earState.q = q;
+    var tip = $('earTip');
+    if (tip) {
+      tip.textContent = q.mode === 'melody'
+        ? '听 3–5 个音，判断旋律整体是上行、下行还是波浪。'
+        : q.mode === 'chord'
+          ? '听三个音同时响起，判断是什么和弦。'
+          : '听两个音同时响起，判断它们相距几度。';
+    }
+    renderEarQuestion();
+    playEarQuestion();
+  }
+
+  function renderEarQuestion() {
+    var box = $('earBody');
+    if (!box || !earState) return;
+    var q = earState.q;
+    box.innerHTML =
+      '<div class="ear-head">' +
+        '<span class="ear-count">第 ' + (earState.total + 1) + ' 题</span>' +
+        '<span class="ear-score">答对 ' + earState.correct + ' / ' + earState.total + '</span>' +
+      '</div>' +
+      '<div class="ear-play">' +
+        '<button class="ear-play-btn" id="earReplayBtn" aria-label="再听一次">🔊</button>' +
+        '<span class="ear-play-hint">点这里再听一次</span>' +
+      '</div>' +
+      '<div class="ear-options" id="earOptions">' +
+        q.options.map(function (o, i) {
+          return '<button class="ear-opt" data-i="' + i + '">' + o + '</button>';
+        }).join('') +
+      '</div>' +
+      '<p class="ear-explain" id="earExplain" role="status" aria-live="polite"></p>';
+
+    $('earReplayBtn').addEventListener('click', playEarQuestion);
+    box.querySelectorAll('.ear-opt').forEach(function (b) {
+      b.addEventListener('click', function () { answerEar(parseInt(b.dataset.i, 10)); });
+    });
+  }
+
+  /** 播放当前题目：音程/和弦同时响，旋律依次响 */
+  function playEarQuestion() {
+    if (!earState || !earState.q || !state.sound) return;
+    var q = earState.q;
+    if (q.mode === 'melody') {
+      var gap = q.intervalMs || 420;
+      q.notes.forEach(function (m, i) {
+        setTimeout(function () {
+          if (earState && earState.q === q) Audio.playNote(m, { dur: 0.45, vel: 0.55 });
+        }, i * gap);
+      });
+    } else {
+      // 同时弹；稍微错开 15ms，避免相位完全重合听起来发闷
+      q.notes.forEach(function (m, i) {
+        Audio.playNote(m, { delay: i * 0.015, dur: 1.2, vel: 0.5 });
+      });
+    }
+  }
+
+  function answerEar(i) {
+    if (!earState || earState.answered) return;
+    earState.answered = true;
+    var q = earState.q;
+    var ok = window.MusicEar.check(q, i);
+    earState.total++;
+    if (ok) earState.correct++;
+    earState.results.push(ok);
+
+    var box = $('earBody');
+    box.querySelectorAll('.ear-opt').forEach(function (b) {
+      var idx = parseInt(b.dataset.i, 10);
+      b.disabled = true;
+      if (idx === q.answer) b.classList.add('correct');
+      else if (idx === i) b.classList.add('wrong');
+    });
+
+    var ex = $('earExplain');
+    if (ex) {
+      var detail = q.mode === 'chord'
+        ? q.label + '（听起来' + (q.hint || '') + '）'
+        : q.mode === 'interval' ? q.label : q.label;
+      ex.className = 'ear-explain ' + (ok ? 'ok' : 'no');
+      ex.innerHTML = (ok ? '✅ 答对啦！' : '❌ 正确答案是「' + q.options[q.answer] + '」。') +
+        '<br><span class="explain-text">' + detail + '</span>';
+    }
+    if (state.sound) {
+      if (ok) Audio.playDing(76); else Audio.playNudge();
+    }
+
+    // 每 8 题结算一次
+    if (earState.total >= 8) {
+      setTimeout(finishEar, ok ? 900 : 1800);
+    } else {
+      setTimeout(nextEarQuestion, ok ? 900 : 1800);
+    }
+  }
+
+  function finishEar() {
+    if (!earState) return;
+    var s = window.MusicEar.summarize(earState.results);
+    var stars = s.accuracy >= 90 ? 3 : s.accuracy >= 70 ? 2 : 1;
+    var box = $('earBody');
+    box.innerHTML =
+      '<div class="train-result">' +
+        '<div class="train-result-head">' + starRow(stars) + ' 听辨完成</div>' +
+        '<div class="train-result-body">答对 ' + s.correct + ' / ' + s.total + '（' + s.accuracy + '%）</div>' +
+        '<div class="train-result-tip">' +
+          (s.accuracy >= 90 ? '耳朵很灵！可以试试更高难度。'
+            : s.accuracy >= 70 ? '不错，多听几遍会更准。'
+            : '先跟着唱一唱这两个音，再听会更容易分辨。') +
+        '</div>' +
+      '</div>' +
+      '<div class="ch-actions"><button class="action-btn" id="earAgainBtn">🔁 再来一组</button></div>';
+    var again = $('earAgainBtn');
+    if (again) again.addEventListener('click', startEar);
+    recordTrainResult('ear', stars, s.accuracy, { correct: s.correct, total: s.total });
+    earState = null;
+    if (state.sound) Audio.playDing(72);
   }
 
   /* ===== 错题本 ===== */
@@ -3535,6 +3724,7 @@
       renderReview();
     });
     $('theoryStartBtn').addEventListener('click', startTheory);
+    $('earStartBtn').addEventListener('click', startEar);
     $('rhythmStartBtn').addEventListener('click', startRhythm);
     $('rhythmPad').addEventListener('pointerdown', function (ev) { ev.preventDefault(); tapRhythm(); });
 
@@ -3583,6 +3773,7 @@
     profiles: function () { return profileStore; },
     state: function () { return state; },
     challengeRun: function () { return challengeRun; },
+    earQuestion: function () { return earState && earState.q; },
     history: function () { return state.history; },
     mistakes: function () { return state.mistakes; }
   };

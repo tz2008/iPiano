@@ -144,8 +144,9 @@
    * @param now   单调时间（ms），测试时可任意给定
    * @returns 本次产生的起音事件，或 null
    */
-  function feed(run, input, now) {
+  function feed(run, input, now, meta) {
     if (!run || run.finished) return null;
+    if (meta && meta.velocity != null) run._velocity = meta.velocity;
     var set = toSet(input);
     if (!set) {                       // 静音：允许同一音再次触发
       run._stable = null; run._stableSince = 0; run._emitted = null;
@@ -159,7 +160,9 @@
     if (now - run._stableSince < STABLE_MS) return null;   // 未稳定
     if (run._emitted && setEquals(set, run._emitted, SEMI_EPS)) return null; // 同一音持续
     run._emitted = set;
-    return onset(run, set, now);
+    var ev = onset(run, set, now);
+    run._velocity = null;
+    return ev;
   }
 
   /** 一次起音：匹配目标音，必要时前瞻 */
@@ -216,7 +219,10 @@
 
   /** 记录事件并更新节奏参考点 */
   function record(run, i, kind, set, now, timing) {
-    run.events.push({ i: i, kind: kind, midis: set, t: now, timing: timing });
+    var ev = { i: i, kind: kind, midis: set, t: now, timing: timing };
+    // MIDI 才有力度；麦克风没有，留 null 表示"无数据"
+    if (run._velocity != null) ev.velocity = run._velocity;
+    run.events.push(ev);
     if (kind === 'hit') run.hits++;
     run.attempts++;
     run._prevT = now;
@@ -234,6 +240,23 @@
     var expectedMs = beats * 60000 / run.bpm;
     var actualMs = Math.max(1, now - run._prevT);
     return { ratio: actualMs / expectedMs, err: actualMs - expectedMs, first: false, expectedBeats: beats };
+  }
+
+  /**
+   * 抬键：记录这个音按住了多久（只有 MIDI 才有）。
+   * 与最近一次命中该音、且尚未记录时长的事件配对。
+   */
+  function noteOff(run, midi, now) {
+    // 即使已经结算也要记录：最后一个音的抬键往往发生在结算之后
+    if (!run || midi == null) return null;
+    for (var i = run.events.length - 1; i >= 0; i--) {
+      var e = run.events[i];
+      if (e.kind !== 'hit' || e.heldMs != null) continue;
+      if (!e.midis || e.midis.indexOf(midi) < 0) continue;
+      e.heldMs = Math.max(1, now - e.t);
+      return e;
+    }
+    return null;
   }
 
   function advance(run, next) {
@@ -287,6 +310,72 @@
     };
   }
 
+  /* ---------- 力度 ---------- */
+  /**
+   * 力度评分：只看 MIDI（麦克风拿不到力度）。
+   * 不判断"该强该弱"（谱面没有力度记号），只判断是否稳定、是否过轻/过重。
+   */
+  function dynamicsStats(run) {
+    var vals = [];
+    run.events.forEach(function (e) {
+      if (e.kind === 'hit' && e.velocity != null) vals.push(e.velocity);
+    });
+    if (vals.length < 3) return { hasData: false, count: vals.length };
+    var sum = 0;
+    vals.forEach(function (v) { sum += v; });
+    var avg = sum / vals.length;
+    var variance = 0;
+    vals.forEach(function (v) { variance += (v - avg) * (v - avg); });
+    var std = Math.sqrt(variance / vals.length);
+
+    var level = 'ok';
+    if (avg < 0.30) level = 'soft';
+    else if (avg > 0.92) level = 'loud';
+    else if (std > 0.20) level = 'uneven';
+
+    var score = 100;
+    if (level === 'soft') score -= 25;
+    if (level === 'loud') score -= 20;
+    if (level === 'uneven') score -= 25;
+    // 波动越大扣分越多（最多再扣 15）
+    score -= Math.min(15, Math.round(std * 75));
+
+    return {
+      hasData: true, count: vals.length,
+      avg: Math.round(avg * 100) / 100,
+      std: Math.round(std * 100) / 100,
+      level: level,
+      accuracy: Math.max(0, Math.min(100, score))
+    };
+  }
+
+  /* ---------- 时值 / 连奏 ---------- */
+  /**
+   * 时值评分：把「按住时长」和「应有的拍长」比较。
+   * 用节奏统计里的整体速度系数归一化，慢练也公平。
+   */
+  function articulationStats(run, tempoRatio) {
+    // 速度系数钳制在 0.5–2.5，避免极端值把"应有的拍长"算得离谱
+    var factor = tempoRatio && tempoRatio > 0 ? Math.max(0.5, Math.min(2.5, tempoRatio)) : 1;
+    var ok = 0, short = 0, long = 0, total = 0;
+    run.events.forEach(function (e) {
+      if (e.kind !== 'hit' || e.heldMs == null) return;
+      var beats = run.seq[e.i] ? run.seq[e.i].beats : 1;
+      var expected = beats * (60000 / run.bpm) * factor;
+      if (!expected) return;
+      var ratio = e.heldMs / expected;
+      total++;
+      if (ratio < 0.35) { short++; e.art = 'short'; }
+      else if (ratio > 1.8) { long++; e.art = 'long'; }
+      else { ok++; e.art = 'ok'; }
+    });
+    if (!total) return { hasData: false, count: 0 };
+    return {
+      hasData: true, count: total, ok: ok, short: short, long: long,
+      accuracy: Math.round(ok / total * 100)
+    };
+  }
+
   /** 总结（报告用） */
   function summary(run) {
     var total = Math.max(0, run.end - run.start);
@@ -299,6 +388,8 @@
     var accuracy = denom ? Math.round(run.hits / denom * 100) : 0;
     var rh = rhythmStats(run);
     var pitchAcc = total ? Math.round((total - wrongNotes - missed) / total * 100) : 0;
+    var dyn = dynamicsStats(run);
+    var art = articulationStats(run, rh.hasData ? rh.tempoRatio : 1);
     return {
       total: total,
       hits: run.hits,
@@ -308,14 +399,29 @@
       accuracy: accuracy,            // 按尝试次数
       pitchAccuracy: Math.max(0, Math.min(100, pitchAcc)), // 按音符数
       rhythm: rh,
+      dynamics: dyn,
+      articulation: art,
       loops: run.loops,
-      stars: starFor(Math.max(0, Math.min(100, pitchAcc)), rh.hasData ? rh.accuracy : 100)
+      stars: starFor(Math.max(0, Math.min(100, pitchAcc)), rh.hasData ? rh.accuracy : 100,
+        dyn.hasData ? dyn.accuracy : null, art.hasData ? art.accuracy : null)
     };
   }
 
   /** 综合星级：音准 70% + 节奏 30% */
-  function starFor(pitchAcc, rhythmAcc) {
-    var score = pitchAcc * 0.7 + rhythmAcc * 0.3;
+  /**
+   * 综合星级。力度/时值只在 MIDI 下才有数据，没有时自动重新分配权重，
+   * 避免麦克风用户被"无数据"拖低分。
+   */
+  function starFor(pitchAcc, rhythmAcc, dynAcc, artAcc) {
+    var parts = [
+      { v: pitchAcc, w: 0.6 },
+      { v: rhythmAcc, w: 0.25 }
+    ];
+    if (dynAcc != null) parts.push({ v: dynAcc, w: 0.075 });
+    if (artAcc != null) parts.push({ v: artAcc, w: 0.075 });
+    var sumW = 0, sum = 0;
+    parts.forEach(function (p) { sumW += p.w; sum += p.v * p.w; });
+    var score = sumW ? sum / sumW : 0;
     if (score >= 92) return 3;
     if (score >= 75) return 2;
     return 1;
@@ -331,6 +437,9 @@
     feed: feed,
     summary: summary,
     rhythmStats: rhythmStats,
+    dynamicsStats: dynamicsStats,
+    articulationStats: articulationStats,
+    noteOff: noteOff,
     STABLE_MS: STABLE_MS,
     RHYTHM_TOL: RHYTHM_TOL
   };

@@ -19,7 +19,7 @@ const { document } = window;
 const assert = require('assert');
 
 // 逐个加载脚本（模拟 <script src> 顺序）
-['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => {
+['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/ear.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => {
   window.eval(fs.readFileSync(path.join(ROOT, f), 'utf8'));
 });
 // 触发 app.js 的初始化：jsdom 解析完成后会自动派发 DOMContentLoaded，
@@ -236,7 +236,7 @@ const savedData = (win) => {
       clef: 'hack', difficulty: 42, naming: 7, theme: 'blue', sound: 'yes',
       stats: { total: 'abc', firstTry: NaN, stars: -3, currentStreak: 'x', bestStreak: 1e9 }
     }));
-    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w2.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/ear.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w2.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
     await sleep(30);
     assert.ok(w2.document.querySelector('#answerButtons'), '损坏数据下应用仍正常初始化');
     assert.strictEqual(w2.document.querySelectorAll('#answerButtons .answer-btn').length, 7, '损坏数据下按钮正常');
@@ -255,7 +255,7 @@ const savedData = (win) => {
         '28': { done: true, stars: 1 }
       }
     }));
-    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w3.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/ear.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w3.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
     await sleep(30);
     const saved3 = savedData(w3);
     assert.ok(saved3.courses['baier-01'], '老 ID 13 → baier-01');
@@ -529,7 +529,7 @@ const savedData = (win) => {
   click(document.querySelector('.nav-tab[data-page="train"]'));
   await sleep(50);
   assert.ok($('page-train').classList.contains('active'), '训练营页面激活');
-  assert.strictEqual(document.querySelectorAll('#trainTabs .seg').length, 5, '训练营 5 个标签');
+  assert.strictEqual(document.querySelectorAll('#trainTabs .seg').length, 6, '训练营 6 个标签');
 
   // 视奏
   click($('sightStartBtn'));
@@ -582,7 +582,7 @@ const savedData = (win) => {
     const dom4 = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
     const w4 = dom4.window;
     w4.localStorage.setItem('music-tutor-v1', JSON.stringify(raw));
-    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w4.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/ear.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w4.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
     await sleep(40);
     const c4 = el => el.dispatchEvent(new w4.MouseEvent('click', { bubbles: true }));
 
@@ -600,7 +600,7 @@ const savedData = (win) => {
     const dom5 = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
     const w5 = dom5.window;
     w5.localStorage.setItem('music-tutor-v1', JSON.stringify(saved4));
-    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w5.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/ear.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => w5.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
     await sleep(40);
     const c5 = el => el.dispatchEvent(new w5.MouseEvent('click', { bubbles: true }));
     c5(w5.document.getElementById('resetCourses'));
@@ -990,6 +990,37 @@ const savedData = (win) => {
     assert.strictEqual(hit.getAttribute('height'), '72', '热区高度 6 个线距');
   }
 
+  // ---------- 视唱练耳 ----------
+  {
+    click(document.querySelector('.nav-tab[data-page="train"]'));
+    await sleep(50);
+    assert.ok(document.querySelector('#trainTabs [data-tab="ear"]'), '训练营有听音标签');
+    click(document.querySelector('#trainTabs [data-tab="ear"]'));
+    await sleep(50);
+    assert.ok($('trainEar').style.display !== 'none', '听音面板显示');
+    assert.ok(document.querySelectorAll('#earLevels .seg').length === 5, '5 个难度');
+
+    click($('earStartBtn'));
+    await sleep(50);
+    assert.ok(document.querySelectorAll('#earOptions .ear-opt').length >= 2, '出现选项');
+    assert.ok($('earReplayBtn'), '有重听按钮');
+
+    // 答对第一题
+    const earQ = window.__musicApp.earQuestion();
+    assert.ok(earQ, '题目已生成');
+    click(document.querySelectorAll('#earOptions .ear-opt')[earQ.answer]);
+    await sleep(50);
+    assert.ok($('earExplain').textContent.includes('答对'), '判分正确');
+    assert.ok($('earExplain').textContent.includes(earQ.label) || $('earExplain').textContent.length > 0, '显示解析');
+
+    // 换难度后题目类型变化
+    click(document.querySelector('#earLevels [data-level="3"]'));
+    await sleep(80);
+    const q2 = window.__musicApp.earQuestion();
+    assert.ok(q2 && q2.mode === 'chord', '切到和弦难度');
+    assert.strictEqual(q2.notes.length, 3, '和弦三个音');
+  }
+
   // ---------- 每日挑战 ----------
   {
     click(document.querySelector('.nav-tab[data-page="weekly"]'));
@@ -1068,7 +1099,7 @@ const savedData = (win) => {
     const domW = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
     const wW = domW.window;
     wW.localStorage.setItem('music-tutor-v1', JSON.stringify(raw));
-    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => wW.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+    ['js/core.js', 'js/courses.js', 'js/songs.js', 'js/library.js', 'js/audio.js', 'js/pitch.js', 'js/midi.js', 'js/follow.js', 'js/stats.js', 'js/recorder.js', 'js/profiles.js', 'js/backup.js', 'js/weekly.js', 'js/challenge.js', 'js/ear.js', 'js/sight.js', 'js/glyphs.js', 'js/staff.js', 'js/gamify.js', 'js/practice.js', 'js/app.js'].forEach(f => wW.eval(fs.readFileSync(path.join(ROOT, f), 'utf8')));
     await sleep(40);
     const cW = el => el.dispatchEvent(new wW.MouseEvent('click', { bubbles: true }));
 

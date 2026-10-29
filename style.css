@@ -906,3 +906,36 @@ html[data-theme="dark"] .train-levels .seg.active { color: #0a0a0a; }
   border-radius: 999px; background: var(--accent); color: #fff; vertical-align: middle;
 }
 html[data-theme="dark"] .badge-limited { color: #0a0a0a; }
+
+/* ========== 视唱练耳 ========== */
+.ear-body { min-height: 240px; }
+.ear-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ear-count { font-size: 13px; font-weight: 700; color: var(--text-2); }
+.ear-score { font-size: 12.5px; color: var(--text-2); font-weight: 600; }
+.ear-play { text-align: center; margin: 16px 0 20px; }
+.ear-play-btn {
+  width: 88px; height: 88px; border-radius: 50%; border: 0; cursor: pointer;
+  font-size: 34px; color: #fff; background: linear-gradient(180deg, #4f7cf0, #3a63d8);
+  box-shadow: 0 6px 0 #2f4fb0, 0 10px 22px rgba(58, 99, 216, 0.32);
+  transition: transform 0.06s, box-shadow 0.06s; touch-action: manipulation;
+}
+.ear-play-btn:active { transform: translateY(5px); box-shadow: 0 1px 0 #2f4fb0; }
+.ear-play-hint { display: block; margin-top: 10px; font-size: 12.5px; color: var(--text-2); }
+.ear-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.ear-opt {
+  min-height: 58px; border-radius: 14px; border: 1.5px solid var(--line);
+  background: var(--card-bg-solid); color: var(--text); font: inherit;
+  font-size: 16px; font-weight: 700; cursor: pointer;
+  transition: border-color 0.15s, transform 0.08s;
+}
+.ear-opt:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+.ear-opt:disabled { cursor: default; }
+.ear-opt.correct { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+.ear-opt.wrong { border-color: var(--err); background: var(--err-bg); color: var(--err); }
+.ear-explain { margin-top: 16px; font-size: 14px; font-weight: 700; min-height: 22px; line-height: 1.7; }
+.ear-explain.ok { color: var(--ok); }
+.ear-explain.no { color: var(--warn); }
+@media (max-width: 640px) {
+  .ear-play-btn { width: 72px; height: 72px; font-size: 28px; }
+  .ear-options { grid-template-columns: repeat(2, 1fr); }
+}
