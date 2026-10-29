@@ -939,3 +939,16 @@ html[data-theme="dark"] .badge-limited { color: #0a0a0a; }
   .ear-play-btn { width: 72px; height: 72px; font-size: 28px; }
   .ear-options { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* 训练营标签在窄屏改为横向滚动，避免文字被挤成竖排 */
+@media (max-width: 640px) {
+  .train-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .train-tabs::-webkit-scrollbar { display: none; }
+  .train-tabs .seg { white-space: nowrap; flex-shrink: 0; padding: 8px 14px; }
+}
